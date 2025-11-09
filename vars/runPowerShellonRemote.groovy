@@ -116,7 +116,7 @@ def executeScript(Map parameters) {
         
         parameters.each { key, value ->
             // Skip only internal Jenkins parameters that aren't PowerShell parameters
-            if (key not in internalParams) {
+            if (!(key in internalParams)) {
                 // Handle special characters in parameter values
                 def escapedValue = value.toString().replace("'", "''")
                 paramString += " -${key} '${escapedValue}'"
@@ -133,7 +133,7 @@ def executeScript(Map parameters) {
             echo "Authentication: Jenkins credentials"
         }
         echo "Remote File: ${parameters.RemoteFile}"
-        echo "Parameters: ${parameters.findAll { it.key != 'RemotePassword' && it.key not in internalParams }}"
+        echo "Parameters: ${parameters.findAll { it.key != 'RemotePassword' && !(it.key in internalParams) }}"
         
         // Write the script to a temporary file
         def tempScriptName = "temp_powershell_script_${System.currentTimeMillis()}.ps1"
