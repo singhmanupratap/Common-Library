@@ -4,7 +4,6 @@
  * Execute PowerShell scripts locally or remotely using Invoke-Command
  * 
  * @param parameters Map containing:
- *   - fileName: Optional PowerShell script filename (defaults to 'runPowerShellOnRemote.ps1')
  *   - RemoteHost: Required remote host for remote execution via Invoke-Command
  *   - RemoteUser: Required remote username for authentication
  *   - RemotePassword: Required remote password for authentication
@@ -109,12 +108,11 @@ def executeScript(Map parameters) {
     
     try {
         // Load PowerShell script from resources
-        def scriptFileName = parameters.fileName ?: 'runPowerShellOnRemote.ps1'
-        def script = libraryResource "powershell/${scriptFileName}"
+        def script = libraryResource "powershell/runPowerShellOnRemote.ps1"
         
         // Build parameter string for PowerShell
         def paramString = ""
-        def internalParams = ['fileName', 'RemoteCredentialsId']
+        def internalParams = ['RemoteCredentialsId']
         
         parameters.each { key, value ->
             // Skip only internal Jenkins parameters that aren't PowerShell parameters
@@ -127,7 +125,7 @@ def executeScript(Map parameters) {
         
         // Log execution details
         echo "=== PowerShell Execution Details ==="
-        echo "Script: ${scriptFileName}"
+        echo "Script: runPowerShellOnRemote.ps1"
         echo "Execution Mode: Remote (${parameters.RemoteHost})"
         if (hasCredentials) {
             echo "Authentication: Provided credentials (${parameters.RemoteUser})"
