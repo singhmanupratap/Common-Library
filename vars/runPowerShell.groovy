@@ -1,17 +1,18 @@
 #!/usr/bin/env groovy
 
 /**
- * Execute PowerShell scripts locally or remotely
+ * Execute PowerShell scripts locally or remotely using Invoke-Command
  * 
  * @param parameters Map containing:
  *   - fileName: Optional PowerShell script filename (defaults to 'runPowershell.ps1')
  *   - Date: Required date parameter
  *   - UserName: Required username parameter
- *   - RemoteHost: Optional remote host for remote execution
- *   - RemoteUser: Optional remote username
- *   - RemotePassword: Optional remote password
+ *   - RemoteHost: Optional remote host for remote execution via Invoke-Command
+ *   - RemoteUser: Optional remote username for authentication
+ *   - RemotePassword: Optional remote password for authentication
+ *   - RemoteFile: Optional remote script file path to execute via Invoke-Command -FilePath
  *   - credentialsId: Optional Jenkins credentials ID for secure remote authentication
- *   - Any other custom parameters for the PowerShell script
+ *   - Any other custom parameters will be passed to the PowerShell script
  * 
  * Examples:
  *   // Local execution
@@ -29,12 +30,23 @@
  *       RemotePassword: 'password123'
  *   ])
  *
- *   // Remote execution with Jenkins credentials (recommended)
+ *   // Remote execution with Jenkins credentials
  *   runpowerShell([
  *       Date: '2025-11-09',
  *       UserName: 'remoteuser',
  *       RemoteHost: 'server.domain.com',
  *       credentialsId: 'remote-server-credentials'
+ *   ])
+ *
+ *   // Remote execution with remote script file
+ *   runpowerShell([
+ *       Date: '2025-11-09',
+ *       UserName: 'remoteuser',
+ *       RemoteHost: 'server.domain.com',
+ *       RemoteFile: 'C:\\Scripts\\MyScript.ps1',
+ *       credentialsId: 'remote-server-credentials',
+ *       Environment: 'Production',
+ *       LogLevel: 'Debug'
  *   ])
  */
 def call(Map parameters = [:]) {
@@ -88,7 +100,9 @@ def withCredentials(Map parameters, String credentialsId) {
  */
 def executeScript(Map parameters) {
     // Determine execution mode
-    def isRemoteExecution = parameters.RemoteHost && parameters.RemoteUser && parameters.RemotePassword
+    def isRemoteExecution = parameters.RemoteHost
+    def hasRemoteFile = parameters.RemoteFile
+    def hasCredentials = parameters.RemoteUser && parameters.RemotePassword
     
     try {
         // Load PowerShell script from resources
@@ -100,16 +114,29 @@ def executeScript(Map parameters) {
         parameters.each { key, value ->
             // Skip internal parameters that aren't PowerShell parameters
             if (key != 'fileName' && key != 'credentialsId') {
-                paramString += " -${key} '${value}'"
+                // Handle special characters in parameter values
+                def escapedValue = value.toString().replace("'", "''")
+                paramString += " -${key} '${escapedValue}'"
             }
         }
         
         // Log execution details
+        echo "=== PowerShell Execution Details ==="
+        echo "Script: ${scriptFileName}"
         if (isRemoteExecution) {
-            echo "Executing PowerShell script '${scriptFileName}' on remote host: ${parameters.RemoteHost}"
-            echo "Remote user: ${parameters.RemoteUser}"
+            echo "Execution Mode: Remote (${parameters.RemoteHost})"
+            if (hasCredentials) {
+                echo "Authentication: Provided credentials (${parameters.RemoteUser})"
+            } else {
+                echo "Authentication: Current user credentials"
+            }
+            if (hasRemoteFile) {
+                echo "Remote File: ${parameters.RemoteFile}"
+            } else {
+                echo "Script Mode: Inline script block"
+            }
         } else {
-            echo "Executing PowerShell script '${scriptFileName}' locally"
+            echo "Execution Mode: Local"
         }
         echo "Parameters: ${parameters.findAll { it.key != 'RemotePassword' && it.key != 'fileName' && it.key != 'credentialsId' }}"
         
@@ -119,10 +146,18 @@ def executeScript(Map parameters) {
         
         // Execute PowerShell script with parameters
         try {
-            powershell "& '.\\${tempScriptName}'${paramString}"
+            def psCommand = "& '.\\${tempScriptName}'${paramString}"
+            echo "Executing PowerShell command: ${psCommand.replace(parameters.RemotePassword ?: '', '***')}"
+            
+            powershell psCommand
+            
         } finally {
             // Clean up temporary script file
-            bat "del ${tempScriptName}"
+            if (isUnix()) {
+                sh "rm -f ${tempScriptName}"
+            } else {
+                bat "if exist ${tempScriptName} del ${tempScriptName}"
+            }
         }
         
         echo "PowerShell script execution completed successfully"
