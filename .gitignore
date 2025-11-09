@@ -1,0 +1,162 @@
+# Jenkins Shared Library .gitignore
+
+# IDE and Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Windows
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msm
+*.msp
+*.lnk
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+*.bak
+*.backup
+*.orig
+*.rej
+
+# Build and output directories
+build/
+target/
+dist/
+out/
+bin/
+obj/
+
+# Dependency directories
+node_modules/
+.npm/
+.yarn/
+
+# Jenkins specific
+.jenkins/
+jenkins.log
+*.hpi
+*.jpi
+
+# Groovy compiled files
+*.class
+
+# Package files
+*.jar
+*.war
+*.ear
+*.zip
+*.tar.gz
+*.rar
+
+# Credentials and secrets (NEVER commit these!)
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.txt
+secrets.txt
+.env
+.env.local
+.env.*.local
+
+# Test results and coverage
+test-results/
+coverage/
+*.xml
+*.html
+
+# Documentation build outputs
+docs/_build/
+site/
+
+# Cache directories
+.cache/
+.gradle/
+.m2/
+
+# Local configuration files
+local.properties
+config.local.*
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+# Docker
+.dockerignore.bak
+
+# Ansible
+*.retry
+
+# Python (if any Python utilities are added)
+__pycache__/
+*.py[cod]
+*.so
+.Python
+.venv/
+env/
+venv/
+
+# Ruby (if any Ruby utilities are added)
+*.gem
+.bundle/
+vendor/
+
+# PowerShell
+*.ps1xml
+
+# Backup files from editors
+*~
+*.backup
+*.bak
+*.orig
+*.rej
+
+# Logs
+logs/
+*.log
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+
+# nyc test coverage
+.nyc_output/
+
+# Dependency directories
+jspm_packages/
+
+# Optional npm cache directory
+.npm
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
