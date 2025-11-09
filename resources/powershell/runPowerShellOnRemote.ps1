@@ -112,7 +112,8 @@ function Execute-PowerShellCommand {
                             Write-Host "Successfully connected with NTLM authentication"
                         }
                         catch {
-                            throw "All authentication methods failed: $($_.Exception.Message)"
+                            Write-Host "All authentication methods failed: $($_.Exception.Message)"
+                            $session = $null
                         }
                     }
                 }
@@ -120,7 +121,62 @@ function Execute-PowerShellCommand {
                 Write-Host "Using current user credentials for authentication"
                 Write-Host "Attempting to connect to: $RemoteHost"
                 Write-Host "Connecting as current user: $env:USERNAME"
-                $session = New-PSSession -ComputerName $RemoteHost -SessionOption $sessionOptions -ErrorAction Stop
+                try {
+                    $session = New-PSSession -ComputerName $RemoteHost -SessionOption $sessionOptions -ErrorAction Stop
+                    Write-Host "Successfully connected to remote host: $RemoteHost"
+                } catch {
+                    Write-Host "Failed to connect with current user credentials: $($_.Exception.Message)"
+                    $session = $null
+                }
+            }
+            
+            # Check if session was created successfully
+            if (-not $session) {
+                Write-Host ""
+                Write-Host "=== Remote Connection Failed - Attempting UNC Path Execution ===" -ForegroundColor Yellow
+                Write-Host "Since remote session creation failed, trying direct UNC path access..."
+                
+                if (-not [string]::IsNullOrEmpty($RemoteFile)) {
+                    # Try UNC path execution as fallback
+                    $uncPath = Convert-ToUNCPath -LocalPath $RemoteFile -RemoteHost $RemoteHost
+                    Write-Host "Attempting direct UNC execution: $uncPath"
+                    
+                    if (Test-Path $uncPath) {
+                        Write-Host "UNC path accessible - executing directly"
+                        
+                        # Build parameter string for direct execution
+                        $paramString = ""
+                        if ($AdditionalParams.Count -gt 0) {
+                            foreach ($key in $AdditionalParams.Keys) {
+                                $value = $AdditionalParams[$key]
+                                $paramString += " -$key '$value'"
+                            }
+                        }
+                        
+                        $command = "& '$uncPath'$paramString"
+                        Write-Host "Executing: $command"
+                        
+                        try {
+                            $result = Invoke-Expression $command
+                            Write-Host "UNC path execution completed successfully"
+                            return @{
+                                Status = "Success (UNC)"
+                                ComputerName = $RemoteHost
+                                Method = "UNC Path Direct Execution"
+                                Timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+                                Parameters = $AdditionalParams
+                            }
+                        }
+                        catch {
+                            Write-Warning "UNC path execution failed: $($_.Exception.Message)"
+                        }
+                    } else {
+                        Write-Warning "UNC path not accessible: $uncPath"
+                    }
+                }
+                
+                # If we reach here, all methods failed
+                throw "Unable to establish remote connection or access via UNC path to $RemoteHost"
             }
             
             Write-Host "Successfully connected to remote host: $RemoteHost"
