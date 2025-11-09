@@ -143,13 +143,26 @@ def executeScript(Map parameters) {
         // Log execution details
         echo "=== PowerShell Execution Details ==="
         echo "Script: runPowerShellOnRemote.ps1"
-        echo "Execution Mode: Remote (${parameters.RemoteHost})"
+        
+        // Determine actual execution mode
+        def isLocalhost = parameters.RemoteHost in ['localhost', '127.0.0.1'] || parameters.RemoteHost == env.COMPUTERNAME
+        if (isLocalhost) {
+            echo "Execution Mode: Local (detected localhost: ${parameters.RemoteHost})"
+        } else {
+            echo "Execution Mode: Remote (${parameters.RemoteHost})"
+            echo "Remote Host Requirements:"
+            echo "  - WinRM enabled (winrm quickconfig)"
+            echo "  - PowerShell Remoting enabled (Enable-PSRemoting -Force)"
+            echo "  - Firewall ports open (5985 HTTP, 5986 HTTPS)"
+            echo "  - Valid authentication credentials"
+        }
+        
         if (hasCredentials) {
             echo "Authentication: Provided credentials (${parameters.RemoteUser})"
         } else {
             echo "Authentication: Jenkins credentials"
         }
-        echo "Remote File: ${parameters.RemoteFile}"
+        echo "Target File: ${parameters.RemoteFile}"
         echo "Parameters for target script: ${additionalParams}"
         
         // Write the script to a temporary file

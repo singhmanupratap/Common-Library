@@ -26,14 +26,62 @@ function Execute-PowerShellCommand {
     )
     
     # Determine execution mode
-    $isRemoteExecution = -not [string]::IsNullOrEmpty($RemoteHost)
+    $isRemoteExecution = -not [string]::IsNullOrEmpty($RemoteHost) -and $RemoteHost -ne "localhost" -and $RemoteHost -ne $env:COMPUTERNAME -and $RemoteHost -ne "127.0.0.1"
     
     if ($isRemoteExecution) {
         Write-Host "=== Remote Execution on: $RemoteHost ==="
         
+        # Pre-connection validation
+        Write-Host "Performing pre-connection checks..."
+        
+        # Test basic connectivity
+        try {
+            $pingResult = Test-NetConnection -ComputerName $RemoteHost -InformationLevel Quiet -WarningAction SilentlyContinue
+            if ($pingResult) {
+                Write-Host "✓ Basic connectivity to $RemoteHost successful"
+            } else {
+                Write-Host "⚠ Basic connectivity test failed - host may be unreachable"
+            }
+        } catch {
+            Write-Host "⚠ Could not test connectivity: $($_.Exception.Message)"
+        }
+        
+        # Test WinRM connectivity
+        try {
+            $winrmTest = Test-NetConnection -ComputerName $RemoteHost -Port 5985 -InformationLevel Quiet -WarningAction SilentlyContinue
+            if ($winrmTest.TcpTestSucceeded) {
+                Write-Host "✓ WinRM port 5985 is accessible"
+            } else {
+                Write-Host "⚠ WinRM port 5985 is not accessible - check firewall and WinRM configuration"
+            }
+        } catch {
+            Write-Host "⚠ Could not test WinRM connectivity: $($_.Exception.Message)"
+        }
+        
         # Create session configuration
         $sessionOptions = New-PSSessionOption -SkipCACheck -SkipCNCheck
         $session = $null
+        
+        # Configure WinRM trusted hosts if needed
+        Write-Host "Checking WinRM configuration..."
+        try {
+            $currentTrustedHosts = Get-Item WSMan:\localhost\Client\TrustedHosts -ErrorAction SilentlyContinue
+            if (-not $currentTrustedHosts -or $currentTrustedHosts.Value -notlike "*$RemoteHost*") {
+                Write-Host "Adding $RemoteHost to TrustedHosts..."
+                if ($currentTrustedHosts -and $currentTrustedHosts.Value) {
+                    Set-Item WSMan:\localhost\Client\TrustedHosts -Value "$($currentTrustedHosts.Value),$RemoteHost" -Force
+                } else {
+                    Set-Item WSMan:\localhost\Client\TrustedHosts -Value $RemoteHost -Force
+                }
+                Write-Host "TrustedHosts updated successfully"
+            } else {
+                Write-Host "$RemoteHost is already in TrustedHosts"
+            }
+        }
+        catch {
+            Write-Warning "Could not update TrustedHosts (may require admin rights): $($_.Exception.Message)"
+            Write-Host "Attempting connection anyway..."
+        }
         
         try {
             # Create session based on authentication method
@@ -41,11 +89,41 @@ function Execute-PowerShellCommand {
                 Write-Host "Using provided credentials for authentication"
                 $securePassword = ConvertTo-SecureString $RemotePassword -AsPlainText -Force
                 $credential = New-Object System.Management.Automation.PSCredential($RemoteUser, $securePassword)
-                $session = New-PSSession -ComputerName $RemoteHost -Credential $credential -SessionOption $sessionOptions
+                
+                Write-Host "Attempting to connect to: $RemoteHost"
+                Write-Host "Connecting as user: $RemoteUser"
+                
+                try {
+                    $session = New-PSSession -ComputerName $RemoteHost -Credential $credential -SessionOption $sessionOptions -ErrorAction Stop
+                    Write-Host "Successfully connected with provided credentials"
+                }
+                catch {
+                    Write-Host "Failed with default authentication: $($_.Exception.Message)"
+                    Write-Host "Trying with basic authentication..."
+                    try {
+                        $session = New-PSSession -ComputerName $RemoteHost -Credential $credential -Authentication Basic -ErrorAction Stop
+                        Write-Host "Successfully connected with basic authentication"
+                    }
+                    catch {
+                        Write-Host "Failed with basic authentication: $($_.Exception.Message)"
+                        Write-Host "Trying with NTLM authentication..."
+                        try {
+                            $session = New-PSSession -ComputerName $RemoteHost -Credential $credential -Authentication Negotiate -ErrorAction Stop
+                            Write-Host "Successfully connected with NTLM authentication"
+                        }
+                        catch {
+                            throw "All authentication methods failed: $($_.Exception.Message)"
+                        }
+                    }
+                }
             } else {
                 Write-Host "Using current user credentials for authentication"
-                $session = New-PSSession -ComputerName $RemoteHost -SessionOption $sessionOptions
+                Write-Host "Attempting to connect to: $RemoteHost"
+                Write-Host "Connecting as current user: $env:USERNAME"
+                $session = New-PSSession -ComputerName $RemoteHost -SessionOption $sessionOptions -ErrorAction Stop
             }
+            
+            Write-Host "Successfully connected to remote host: $RemoteHost"
             
             # Execute based on RemoteFile parameter
             if (-not [string]::IsNullOrEmpty($RemoteFile)) {
@@ -145,8 +223,96 @@ function Execute-PowerShellCommand {
             return $result
             
         } catch {
-            Write-Error "Failed to execute on remote host: $($_.Exception.Message)"
-            throw $_
+            Write-Host "=== Remote Connection Failed ==="
+            Write-Host "Remote Host: $RemoteHost"
+            Write-Host "Error: $($_.Exception.Message)"
+            
+            # Check if this is localhost and we can fall back to local execution
+            $isLocalhost = $RemoteHost -in @("localhost", "127.0.0.1", $env:COMPUTERNAME)
+            
+            if ($isLocalhost) {
+                Write-Host ""
+                Write-Host "=== Falling Back to Local Execution ==="
+                Write-Host "Since RemoteHost is localhost and remote connection failed, switching to local execution..."
+                
+                # Execute the remote file locally
+                if (-not [string]::IsNullOrEmpty($RemoteFile)) {
+                    Write-Host "Executing local file: $RemoteFile"
+                    
+                    # Display all parameters
+                    if ($AdditionalParams.Count -gt 0) {
+                        Write-Host "Parameters:"
+                        foreach ($key in $AdditionalParams.Keys) {
+                            Write-Host "  $key = $($AdditionalParams[$key])"
+                        }
+                        
+                        # Build parameter string for the local script
+                        $paramString = ""
+                        foreach ($key in $AdditionalParams.Keys) {
+                            $value = $AdditionalParams[$key]
+                            $paramString += " -$key '$value'"
+                        }
+                        
+                        # Execute the local script with parameters
+                        $command = "& '$RemoteFile'$paramString"
+                        Write-Host "Executing locally: $command"
+                        try {
+                            $result = Invoke-Expression $command
+                            Write-Host "Local execution completed successfully"
+                            return $result
+                        } catch {
+                            Write-Error "Failed to execute local script: $($_.Exception.Message)"
+                            throw $_
+                        }
+                    } else {
+                        Write-Host "No parameters passed"
+                        # Execute the local script without parameters
+                        $command = "& '$RemoteFile'"
+                        Write-Host "Executing locally: $command"
+                        try {
+                            $result = Invoke-Expression $command
+                            Write-Host "Local execution completed successfully"
+                            return $result
+                        } catch {
+                            Write-Error "Failed to execute local script: $($_.Exception.Message)"
+                            throw $_
+                        }
+                    }
+                } else {
+                    # Return basic execution details for inline execution
+                    return @{
+                        Status = "Success"
+                        ComputerName = $env:COMPUTERNAME
+                        User = $env:USERNAME
+                        Timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+                        Parameters = $AdditionalParams
+                        ExecutionMode = "Local (fallback)"
+                    }
+                }
+            } else {
+                # Provide troubleshooting information for real remote hosts
+                Write-Host ""
+                Write-Host "=== Troubleshooting Information ==="
+                Write-Host "1. Ensure WinRM is enabled on the remote host:"
+                Write-Host "   - Run: winrm quickconfig"
+                Write-Host "   - Run: Enable-PSRemoting -Force"
+                Write-Host ""
+                Write-Host "2. Check network connectivity:"
+                Write-Host "   - Test-NetConnection -ComputerName $RemoteHost -Port 5985"
+                Write-Host "   - Test-NetConnection -ComputerName $RemoteHost -Port 5986"
+                Write-Host ""
+                Write-Host "3. Verify authentication:"
+                Write-Host "   - Ensure credentials are correct"
+                Write-Host "   - Check if remote user has 'Log on as a service' rights"
+                Write-Host "   - Consider using domain credentials: domain\\username"
+                Write-Host ""
+                Write-Host "4. Firewall settings:"
+                Write-Host "   - Ensure Windows Remote Management ports are open"
+                Write-Host "   - Default HTTP: 5985, HTTPS: 5986"
+                Write-Host ""
+                
+                throw "Failed to establish remote PowerShell session to $RemoteHost`: $($_.Exception.Message)"
+            }
         } finally {
             if ($session) {
                 Remove-PSSession $session -ErrorAction SilentlyContinue
@@ -160,24 +326,67 @@ function Execute-PowerShellCommand {
         Write-Host "Executed on: $env:COMPUTERNAME"
         Write-Host "Current User: $env:USERNAME"
         
-        # Display all parameters
-        if ($AdditionalParams.Count -gt 0) {
-            Write-Host "Parameters:"
-            foreach ($key in $AdditionalParams.Keys) {
-                Write-Host "  $key = $($AdditionalParams[$key])"
+        # Execute the remote file locally if specified
+        if (-not [string]::IsNullOrEmpty($RemoteFile)) {
+            Write-Host "Executing local file: $RemoteFile"
+            
+            # Display all parameters
+            if ($AdditionalParams.Count -gt 0) {
+                Write-Host "Parameters:"
+                foreach ($key in $AdditionalParams.Keys) {
+                    Write-Host "  $key = $($AdditionalParams[$key])"
+                }
+                
+                # Build parameter string for the local script
+                $paramString = ""
+                foreach ($key in $AdditionalParams.Keys) {
+                    $value = $AdditionalParams[$key]
+                    $paramString += " -$key '$value'"
+                }
+                
+                # Execute the local script with parameters
+                $command = "& '$RemoteFile'$paramString"
+                Write-Host "Executing: $command"
+                try {
+                    $result = Invoke-Expression $command
+                } catch {
+                    Write-Error "Failed to execute local script: $($_.Exception.Message)"
+                    throw $_
+                }
+            } else {
+                Write-Host "No parameters passed"
+                # Execute the local script without parameters
+                $command = "& '$RemoteFile'"
+                Write-Host "Executing: $command"
+                try {
+                    $result = Invoke-Expression $command
+                } catch {
+                    Write-Error "Failed to execute local script: $($_.Exception.Message)"
+                    throw $_
+                }
             }
         } else {
-            Write-Host "No parameters passed"
+            # Display all parameters
+            if ($AdditionalParams.Count -gt 0) {
+                Write-Host "Parameters:"
+                foreach ($key in $AdditionalParams.Keys) {
+                    Write-Host "  $key = $($AdditionalParams[$key])"
+                }
+            } else {
+                Write-Host "No parameters passed"
+            }
+            
+            # Return execution details for inline execution
+            $result = @{
+                Status = "Success"
+                ComputerName = $env:COMPUTERNAME
+                User = $env:USERNAME
+                Timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+                Parameters = $AdditionalParams
+            }
         }
         
-        # Return execution details
-        return @{
-            Status = "Success"
-            ComputerName = $env:COMPUTERNAME
-            User = $env:USERNAME
-            Timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
-            Parameters = $AdditionalParams
-        }
+        return $result
     }
 }
 
