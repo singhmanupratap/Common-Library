@@ -1,10 +1,4 @@
 param(
-    [Parameter(Mandatory=$true)]
-    [string]$Date,
-    
-    [Parameter(Mandatory=$true)]
-    [string]$UserName,
-    
     [Parameter(Mandatory=$false)]
     [string]$RemoteHost,
     
@@ -21,8 +15,6 @@ param(
 # Function to execute commands locally or remotely using Invoke-Command
 function Execute-PowerShellCommand {
     param(
-        [string]$Date,
-        [string]$UserName,
         [string]$RemoteHost,
         [string]$RemoteUser,
         [string]$RemotePassword,
@@ -54,38 +46,58 @@ function Execute-PowerShellCommand {
             
             # Execute based on RemoteFile parameter
             if (-not [string]::IsNullOrEmpty($RemoteFile)) {
-                Write-Host "Executing remote file: $RemoteFile"
+                Write-Host "Processing remote file: $RemoteFile"
                 
-                # Build parameter hashtable for remote script
-                $remoteParams = @{
-                    Date = $Date
-                    UserName = $UserName
+                # Generate UNC path from RemoteFile
+                $uncPath = $RemoteFile
+                
+                # Check if RemoteFile is already a UNC path or absolute path
+                if ($RemoteFile -notlike "\\*" -and $RemoteFile -notlike "*:*") {
+                    # Convert relative path to UNC path
+                    # Replace C:\ with \\RemoteHost\C$\ format
+                    $uncPath = "\\$RemoteHost\C$\$($RemoteFile.TrimStart('\'))"
+                    Write-Host "Generated UNC path: $uncPath"
+                } elseif ($RemoteFile -like "*:*" -and $RemoteFile -notlike "\\*") {
+                    # Convert local path like C:\Scripts\file.ps1 to \\RemoteHost\C$\Scripts\file.ps1
+                    $drive = $RemoteFile.Substring(0, 1)
+                    $pathWithoutDrive = $RemoteFile.Substring(3)
+                    $uncPath = "\\$RemoteHost\$drive`$\$pathWithoutDrive"
+                    Write-Host "Converted local path to UNC: $uncPath"
+                } else {
+                    Write-Host "Using provided UNC path: $uncPath"
                 }
                 
-                # Add additional parameters
+                Write-Host "Executing remote file via UNC path: $uncPath"
+                
+                # Build parameter hashtable for remote script
+                $remoteParams = @{}
+                
+                # Add all additional parameters
                 foreach ($key in $AdditionalParams.Keys) {
                     $remoteParams[$key] = $AdditionalParams[$key]
                 }
                 
-                # Execute remote script file with parameters
-                $result = Invoke-Command -Session $session -FilePath $RemoteFile -ArgumentList $remoteParams
+                # Execute remote script file with parameters using UNC path
+                if ($remoteParams.Count -gt 0) {
+                    $result = Invoke-Command -Session $session -FilePath $uncPath -ArgumentList $remoteParams
+                } else {
+                    $result = Invoke-Command -Session $session -FilePath $uncPath
+                }
                 
             } else {
                 Write-Host "Executing inline script block on remote host"
                 
                 # Execute inline script block
                 $result = Invoke-Command -Session $session -ScriptBlock {
-                    param($d, $u, $additionalParams)
+                    param($additionalParams)
                     
                     Write-Host "=== Remote Script Execution ==="
-                    Write-Host "Date: $d"
-                    Write-Host "User Name: $u"
                     Write-Host "Executed on: $env:COMPUTERNAME"
                     Write-Host "Current User: $env:USERNAME"
                     
-                    # Display additional parameters
+                    # Display all parameters
                     if ($additionalParams.Count -gt 0) {
-                        Write-Host "Additional Parameters:"
+                        Write-Host "Parameters:"
                         foreach ($key in $additionalParams.Keys) {
                             Write-Host "  $key = $($additionalParams[$key])"
                         }
@@ -96,11 +108,10 @@ function Execute-PowerShellCommand {
                         Status = "Success"
                         ComputerName = $env:COMPUTERNAME
                         User = $env:USERNAME
-                        Date = $d
-                        UserName = $u
                         Timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+                        Parameters = $additionalParams
                     }
-                } -ArgumentList $Date, $UserName, $AdditionalParams
+                } -ArgumentList $AdditionalParams
             }
             
             Write-Host "Remote execution completed successfully"
@@ -118,14 +129,12 @@ function Execute-PowerShellCommand {
         
     } else {
         Write-Host "=== Local Execution ==="
-        Write-Host "Date: $Date"
-        Write-Host "User Name: $UserName"
         Write-Host "Executed on: $env:COMPUTERNAME"
         Write-Host "Current User: $env:USERNAME"
         
-        # Display additional parameters
+        # Display all parameters
         if ($AdditionalParams.Count -gt 0) {
-            Write-Host "Additional Parameters:"
+            Write-Host "Parameters:"
             foreach ($key in $AdditionalParams.Keys) {
                 Write-Host "  $key = $($AdditionalParams[$key])"
             }
@@ -136,15 +145,14 @@ function Execute-PowerShellCommand {
             Status = "Success"
             ComputerName = $env:COMPUTERNAME
             User = $env:USERNAME
-            Date = $Date
-            UserName = $UserName
             Timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+            Parameters = $AdditionalParams
         }
     }
 }
 
 # Collect all additional parameters (exclude known parameters)
-$knownParams = @('Date', 'UserName', 'RemoteHost', 'RemoteUser', 'RemotePassword', 'RemoteFile')
+$knownParams = @('RemoteHost', 'RemoteUser', 'RemotePassword', 'RemoteFile')
 $additionalParams = @{}
 
 # Get all script parameters
@@ -156,7 +164,7 @@ foreach ($param in $PSBoundParameters.GetEnumerator()) {
 
 # Execute the command
 try {
-    $result = Execute-PowerShellCommand -Date $Date -UserName $UserName -RemoteHost $RemoteHost -RemoteUser $RemoteUser -RemotePassword $RemotePassword -RemoteFile $RemoteFile -AdditionalParams $additionalParams
+    $result = Execute-PowerShellCommand -RemoteHost $RemoteHost -RemoteUser $RemoteUser -RemotePassword $RemotePassword -RemoteFile $RemoteFile -AdditionalParams $additionalParams
     
     if ($result) {
         Write-Host "Execution Result:"
