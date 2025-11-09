@@ -117,14 +117,6 @@ def executeScript(Map parameters) {
         def tempScriptName = "temp_powershell_script_${System.currentTimeMillis()}.ps1"
         writeFile file: tempScriptName, text: script
         
-        // Build parameter string for PowerShell script invocation
-        def paramString = ""
-        parameters.each { key, value ->
-            if (key != 'fileName' && key != 'credentialsId') {
-                paramString += " -${key} '${value}'"
-            }
-        }
-        
         // Execute PowerShell script with parameters
         try {
             powershell "& '.\\${tempScriptName}'${paramString}"
