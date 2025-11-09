@@ -15,6 +15,31 @@ param(
     [hashtable]$AdditionalParams = @{}
 )
 
+# Function to convert local path to UNC path
+function Convert-ToUNCPath {
+    param(
+        [string]$LocalPath,
+        [string]$RemoteHost
+    )
+    
+    # If already a UNC path, return as-is
+    if ($LocalPath -like "\\*") {
+        return $LocalPath
+    }
+    
+    # Convert local path like C:\path\file.ps1 to \\RemoteHost\C$\path\file.ps1
+    if ($LocalPath -match "^([A-Za-z]):(.*)") {
+        $drive = $matches[1]
+        $pathWithoutDrive = $matches[2]
+        $uncPath = "\\$RemoteHost\$drive`$" + $pathWithoutDrive
+        return $uncPath
+    } else {
+        # If no drive letter, assume it's a relative path and add to C$
+        $uncPath = "\\$RemoteHost\C$\" + $LocalPath.TrimStart('\')
+        return $uncPath
+    }
+}
+
 # Function to execute commands locally or remotely using Invoke-Command
 function Execute-PowerShellCommand {
     param(
@@ -76,6 +101,18 @@ function Execute-PowerShellCommand {
                 Write-Host "TrustedHosts updated successfully"
             } else {
                 Write-Host "$RemoteHost is already in TrustedHosts"
+            }
+            
+            # Enable unencrypted traffic for basic authentication
+            try {
+                $allowUnencrypted = Get-Item WSMan:\localhost\Client\AllowUnencrypted -ErrorAction SilentlyContinue
+                if (-not $allowUnencrypted -or $allowUnencrypted.Value -eq "false") {
+                    Write-Host "Enabling unencrypted traffic for basic authentication..."
+                    Set-Item WSMan:\localhost\Client\AllowUnencrypted -Value $true -Force
+                    Write-Host "Unencrypted traffic enabled"
+                }
+            } catch {
+                Write-Warning "Could not configure unencrypted traffic: $($_.Exception.Message)"
             }
         }
         catch {
