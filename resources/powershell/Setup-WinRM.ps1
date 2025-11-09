@@ -23,7 +23,7 @@ if (-not $isAdmin) {
     exit 1
 }
 
-Write-Host "Running with Administrator privileges ✓" -ForegroundColor Green
+Write-Host "Running with Administrator privileges" -ForegroundColor Green
 Write-Host ""
 
 # Enable PS Remoting if requested
@@ -31,7 +31,7 @@ if ($EnableRemoting) {
     Write-Host "1. Enabling PowerShell Remoting..." -ForegroundColor Cyan
     try {
         Enable-PSRemoting -Force -SkipNetworkProfileCheck
-        Write-Host "   PowerShell Remoting enabled ✓" -ForegroundColor Green
+        Write-Host "   PowerShell Remoting enabled" -ForegroundColor Green
     }
     catch {
         Write-Error "   Failed to enable PowerShell Remoting: $($_.Exception.Message)"
@@ -45,7 +45,7 @@ try {
     $currentTrustedHosts = Get-Item WSMan:\localhost\Client\TrustedHosts -ErrorAction SilentlyContinue
     
     if ($currentTrustedHosts -and $currentTrustedHosts.Value -like "*$RemoteHost*") {
-        Write-Host "   $RemoteHost is already in TrustedHosts ✓" -ForegroundColor Green
+        Write-Host "   $RemoteHost is already in TrustedHosts" -ForegroundColor Green
     } else {
         if ($currentTrustedHosts -and $currentTrustedHosts.Value) {
             $newValue = "$($currentTrustedHosts.Value),$RemoteHost"
@@ -54,7 +54,7 @@ try {
         }
         
         Set-Item WSMan:\localhost\Client\TrustedHosts -Value $newValue -Force
-        Write-Host "   Added $RemoteHost to TrustedHosts ✓" -ForegroundColor Green
+        Write-Host "   Added $RemoteHost to TrustedHosts" -ForegroundColor Green
         Write-Host "   Current TrustedHosts: $newValue" -ForegroundColor Gray
     }
 }
@@ -72,7 +72,7 @@ try {
     if ($winrmService.Status -ne 'Running') {
         Write-Host "   Starting WinRM service..." -ForegroundColor Yellow
         Start-Service WinRM
-        Write-Host "   WinRM service started ✓" -ForegroundColor Green
+        Write-Host "   WinRM service started" -ForegroundColor Green
     }
 }
 catch {
@@ -86,20 +86,20 @@ if ($TestConnection) {
     
     # Test HTTP port (5985)
     $httpTest = Test-NetConnection -ComputerName $RemoteHost -Port 5985 -InformationLevel Quiet
-    Write-Host "   HTTP (5985): $(if($httpTest) { '✓ Open' } else { '✗ Blocked' })" -ForegroundColor $(if($httpTest) { 'Green' } else { 'Red' })
+    Write-Host "   HTTP (5985): $(if($httpTest) { 'Open' } else { 'Blocked' })" -ForegroundColor $(if($httpTest) { 'Green' } else { 'Red' })
     
     # Test HTTPS port (5986)
     $httpsTest = Test-NetConnection -ComputerName $RemoteHost -Port 5986 -InformationLevel Quiet
-    Write-Host "   HTTPS (5986): $(if($httpsTest) { '✓ Open' } else { '✗ Blocked' })" -ForegroundColor $(if($httpsTest) { 'Green' } else { 'Red' })
+    Write-Host "   HTTPS (5986): $(if($httpsTest) { 'Open' } else { 'Blocked' })" -ForegroundColor $(if($httpsTest) { 'Green' } else { 'Red' })
     
     # Test WSMan
     try {
         $wsmanTest = Test-WSMan -ComputerName $RemoteHost -ErrorAction Stop
-        Write-Host "   WSMan Test: ✓ Success" -ForegroundColor Green
+        Write-Host "   WSMan Test: Success" -ForegroundColor Green
         Write-Host "   Remote PowerShell Version: $($wsmanTest.ProductVersion)" -ForegroundColor Gray
     }
     catch {
-        Write-Host "   WSMan Test: ✗ Failed - $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host "   WSMan Test: Failed - $($_.Exception.Message)" -ForegroundColor Red
     }
 }
 
