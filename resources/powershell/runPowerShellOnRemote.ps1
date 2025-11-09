@@ -79,13 +79,19 @@ function Execute-PowerShellCommand {
                 
                 # Execute remote script file with parameters using UNC path
                 if ($remoteParams.Count -gt 0) {
+                    Write-Host "Executing command: Invoke-Command -Session [RemoteSession] -FilePath '$uncPath' -ArgumentList [Parameters]"
+                    Write-Host "Parameters being passed: $($remoteParams.Keys -join ', ')"
                     $result = Invoke-Command -Session $session -FilePath $uncPath -ArgumentList $remoteParams
                 } else {
+                    Write-Host "Executing command: Invoke-Command -Session [RemoteSession] -FilePath '$uncPath'"
+                    Write-Host "No parameters being passed"
                     $result = Invoke-Command -Session $session -FilePath $uncPath
                 }
                 
             } else {
                 Write-Host "Executing inline script block on remote host"
+                Write-Host "Executing command: Invoke-Command -Session [RemoteSession] -ScriptBlock [InlineScript] -ArgumentList [Parameters]"
+                Write-Host "Parameters being passed: $($AdditionalParams.Keys -join ', ')"
                 
                 # Execute inline script block
                 $result = Invoke-Command -Session $session -ScriptBlock {
@@ -129,6 +135,7 @@ function Execute-PowerShellCommand {
         
     } else {
         Write-Host "=== Local Execution ==="
+        Write-Host "Executing command: Local script execution (no Invoke-Command required)"
         Write-Host "Executed on: $env:COMPUTERNAME"
         Write-Host "Current User: $env:USERNAME"
         
@@ -138,6 +145,8 @@ function Execute-PowerShellCommand {
             foreach ($key in $AdditionalParams.Keys) {
                 Write-Host "  $key = $($AdditionalParams[$key])"
             }
+        } else {
+            Write-Host "No parameters passed"
         }
         
         # Return execution details
