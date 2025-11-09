@@ -19,13 +19,13 @@ param(
 function Execute-Command {
     param(
         [string]$Command,
-        [string]$Host,
+        [string]$HostName,
         [string]$User,
         [string]$Password
     )
     
-    if ($Host -and $User -and $Password) {
-        Write-Host "Executing on remote host: $Host"
+    if ($HostName -and $User -and $Password) {
+        Write-Host "Executing on remote host: $HostName"
         
         # Create credential object
         $SecurePassword = ConvertTo-SecureString $Password -AsPlainText -Force
@@ -33,7 +33,7 @@ function Execute-Command {
         
         # Execute command on remote host
         try {
-            $session = New-PSSession -ComputerName $Host -Credential $Credential
+            $session = New-PSSession -ComputerName $HostName -Credential $Credential
             $result = Invoke-Command -Session $session -ScriptBlock {
                 param($d, $u)
                 Write-Host "Date: $d"
@@ -58,4 +58,4 @@ function Execute-Command {
 }
 
 # Execute the command
-Execute-Command -Command "SampleCommand" -Host $RemoteHost -User $RemoteUser -Password $RemotePassword
+Execute-Command -Command "SampleCommand" -HostName $RemoteHost -User $RemoteUser -Password $RemotePassword
