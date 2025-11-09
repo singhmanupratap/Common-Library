@@ -93,7 +93,7 @@ def executeScript(Map parameters) {
     try {
         // Load PowerShell script from resources
         def scriptFileName = parameters.fileName ?: 'runPowershell.ps1'
-        def script = libraryResource "resources/powershell/${scriptFileName}"
+        def script = libraryResource "powershell/${scriptFileName}"
         
         // Build parameter string for PowerShell
         def paramString = ""
