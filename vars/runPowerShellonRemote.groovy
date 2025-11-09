@@ -111,17 +111,34 @@ def executeScript(Map parameters) {
         def script = libraryResource "powershell/runPowerShellOnRemote.ps1"
         
         // Build parameter string for PowerShell
-        def paramString = ""
-        def internalParams = ['RemoteCredentialsId']
+        def coreParams = ['RemoteHost', 'RemoteUser', 'RemotePassword', 'RemoteFile', 'RemoteCredentialsId']
+        def additionalParams = [:]
+        def coreParamString = ""
+        def additionalParamString = ""
         
         parameters.each { key, value ->
-            // Skip only internal Jenkins parameters that aren't PowerShell parameters
-            if (!(key in internalParams)) {
-                // Handle special characters in parameter values
+            if (key in coreParams && key != 'RemoteCredentialsId') {
+                // Core parameters for runPowerShellOnRemote.ps1
                 def escapedValue = value.toString().replace("'", "''")
-                paramString += " -${key} '${escapedValue}'"
+                coreParamString += " -${key} '${escapedValue}'"
+            } else if (!(key in coreParams)) {
+                // Additional parameters to be passed to the target script
+                additionalParams[key] = value
             }
         }
+        
+        // Add additional parameters as a hashtable parameter
+        if (additionalParams.size() > 0) {
+            def hashtableString = "@{"
+            additionalParams.each { key, value ->
+                def escapedValue = value.toString().replace("'", "''")
+                hashtableString += "'${key}'='${escapedValue}';"
+            }
+            hashtableString = hashtableString.substring(0, hashtableString.length() - 1) + "}"
+            coreParamString += " -AdditionalParams ${hashtableString}"
+        }
+        
+        def paramString = coreParamString
         
         // Log execution details
         echo "=== PowerShell Execution Details ==="
@@ -133,7 +150,7 @@ def executeScript(Map parameters) {
             echo "Authentication: Jenkins credentials"
         }
         echo "Remote File: ${parameters.RemoteFile}"
-        echo "Parameters: ${parameters.findAll { it.key != 'RemotePassword' && !(it.key in internalParams) }}"
+        echo "Parameters for target script: ${additionalParams}"
         
         // Write the script to a temporary file
         def tempScriptName = "temp_powershell_script_${System.currentTimeMillis()}.ps1"

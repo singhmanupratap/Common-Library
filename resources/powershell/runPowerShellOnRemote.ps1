@@ -9,7 +9,10 @@ param(
     [string]$RemotePassword,
     
     [Parameter(Mandatory=$false)]
-    [string]$RemoteFile
+    [string]$RemoteFile,
+    
+    [Parameter(Mandatory=$false)]
+    [hashtable]$AdditionalParams = @{}
 )
 
 # Function to execute commands locally or remotely using Invoke-Command
@@ -178,20 +181,9 @@ function Execute-PowerShellCommand {
     }
 }
 
-# Collect all additional parameters (exclude known parameters)
-$knownParams = @('RemoteHost', 'RemoteUser', 'RemotePassword', 'RemoteFile')
-$additionalParams = @{}
-
-# Get all script parameters
-foreach ($param in $PSBoundParameters.GetEnumerator()) {
-    if ($param.Key -notin $knownParams) {
-        $additionalParams[$param.Key] = $param.Value
-    }
-}
-
 # Execute the command
 try {
-    $result = Execute-PowerShellCommand -RemoteHost $RemoteHost -RemoteUser $RemoteUser -RemotePassword $RemotePassword -RemoteFile $RemoteFile -AdditionalParams $additionalParams
+    $result = Execute-PowerShellCommand -RemoteHost $RemoteHost -RemoteUser $RemoteUser -RemotePassword $RemotePassword -RemoteFile $RemoteFile -AdditionalParams $AdditionalParams
     
     if ($result) {
         Write-Host "Execution Result:"
