@@ -81,7 +81,25 @@ function Execute-PowerShellCommand {
                 if ($remoteParams.Count -gt 0) {
                     Write-Host "Executing command: Invoke-Command -Session [RemoteSession] -FilePath '$uncPath' -ArgumentList [Parameters]"
                     Write-Host "Parameters being passed: $($remoteParams.Keys -join ', ')"
-                    $result = Invoke-Command -Session $session -FilePath $uncPath -ArgumentList $remoteParams
+                    
+                    # Build script block that calls the remote file with parameters
+                    $scriptBlock = {
+                        param($filePath, $parameters)
+                        
+                        # Build parameter string for the remote script
+                        $paramString = ""
+                        foreach ($key in $parameters.Keys) {
+                            $value = $parameters[$key]
+                            $paramString += " -$key '$value'"
+                        }
+                        
+                        # Execute the remote script with parameters
+                        $command = "& '$filePath'$paramString"
+                        Write-Host "Executing: $command"
+                        Invoke-Expression $command
+                    }
+                    
+                    $result = Invoke-Command -Session $session -ScriptBlock $scriptBlock -ArgumentList $uncPath, $remoteParams
                 } else {
                     Write-Host "Executing command: Invoke-Command -Session [RemoteSession] -FilePath '$uncPath'"
                     Write-Host "No parameters being passed"
