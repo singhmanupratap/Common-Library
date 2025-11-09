@@ -113,8 +113,25 @@ def executeScript(Map parameters) {
         }
         echo "Parameters: ${parameters.findAll { it.key != 'RemotePassword' && it.key != 'fileName' && it.key != 'credentialsId' }}"
         
-        // Execute PowerShell script
-        powershell(script: script + paramString)
+        // Write the script to a temporary file
+        def tempScriptName = "temp_powershell_script_${System.currentTimeMillis()}.ps1"
+        writeFile file: tempScriptName, text: script
+        
+        // Build parameter string for PowerShell script invocation
+        def paramString = ""
+        parameters.each { key, value ->
+            if (key != 'fileName' && key != 'credentialsId') {
+                paramString += " -${key} '${value}'"
+            }
+        }
+        
+        // Execute PowerShell script with parameters
+        try {
+            powershell "& '.\\${tempScriptName}'${paramString}"
+        } finally {
+            // Clean up temporary script file
+            bat "del ${tempScriptName}"
+        }
         
         echo "PowerShell script execution completed successfully"
         
